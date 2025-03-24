@@ -1,5 +1,6 @@
 import os
 from database.db_config import get_db_connection
+from utils.password_utils import hash_password, verify_password
 from utils.password_generator import generate_password
 from utils.pdf_generator import create_pdf
 from utils.pdf_encryptor import encrypt_pdf
@@ -15,7 +16,7 @@ os.makedirs(PATIENT_DIR, exist_ok=True)
 os.makedirs(ENCRYPTED_DIR, exist_ok=True)
 
 def fetch_patients():
-    """Fetches patients from the database."""
+    """Fetch patients from the database."""
     conn = get_db_connection()
     if conn is None:
         return []
@@ -28,23 +29,25 @@ def fetch_patients():
     return patients
 
 def process_patient_report(patient):
-    """Processes a single patient: generates and encrypts PDF, stores password."""
+    """Process a single patient: generates and encrypts PDF, stores password securely."""
     patient_id, name, age, gender, diagnosis = patient
+    print(f"\n📂 Processing report for {name} (ID: {patient_id})...")
     password = generate_password()
-    
-    pdf_path = create_pdf((patient_id, name, age, gender, diagnosis, password, ""), PATIENT_DIR)
-    sha256_hash = generate_sha256(pdf_path)
-    
-    encrypted_pdf_path = encrypt_pdf(pdf_path, password, ENCRYPTED_DIR)
-    
-    # Debugging prints
-    print(f"Generated password for {name}: {password}")
-    print(f"SHA256 Hash for {name}: {sha256_hash}")
+    hashed_password = hash_password(password)
 
-    # Store password and hash in the database
+    pdf_path = create_pdf((patient_id, name, age, gender, diagnosis), PATIENT_DIR)
+    print(f"📄 PDF generated at {pdf_path}")
+    encrypted_pdf_path = encrypt_pdf(pdf_path, password, ENCRYPTED_DIR)
+    print(f"🔐 Encrypted PDF stored at {encrypted_pdf_path}")
+
+    # Generate hash after encryption
+    sha256_hash = generate_sha256(encrypted_pdf_path)
+    print(f"🔑 SHA256 Hash: {sha256_hash}") 
+
+    # Store hashed password and hash in the database
     conn = get_db_connection()
     if conn is None:
-        print("Error: Database connection failed!")
+        print("❌ Database connection failed!")
         return
 
     cursor = conn.cursor()
@@ -53,7 +56,7 @@ def process_patient_report(patient):
     """
     
     try:
-        cursor.execute(update_query, (password, sha256_hash, patient_id))
+        cursor.execute(update_query, (hashed_password, sha256_hash, patient_id))
         conn.commit()
         print(f"✅ Database updated for {name} (ID: {patient_id})")
     except Exception as e:
@@ -63,9 +66,8 @@ def process_patient_report(patient):
 
     print(f"Processed report for {name}: {encrypted_pdf_path}")
 
-
 def process_patient_reports():
-    """Processes all patients in the database."""
+    """Process all patients in the database."""
     print("Processing patient reports...")
     patients = fetch_patients()
     for patient in patients:

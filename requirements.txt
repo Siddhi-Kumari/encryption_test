@@ -2,3 +2,5 @@ reportlab
 PyPDF2
 psycopg2
 python-dotenv
+
+#python database/setup_db.py
